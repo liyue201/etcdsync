@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	defaultTTL = 60
-	defaultTry = 3
+	defaultTTL   = 60
+	defaultTry   = 3
 	deleteAction = "delete"
 	expireAction = "expire"
 )
@@ -67,8 +67,8 @@ func New(key string, ttl int, machines []string) *Mutex {
 		id:     fmt.Sprintf("%v-%v-%v", hostname, os.Getpid(), time.Now().Format("20060102-15:04:05.999999999")),
 		client: c,
 		kapi:   client.NewKeysAPI(c),
-		ctx: context.TODO(),
-		ttl: time.Second * time.Duration(ttl),
+		ctx:    context.TODO(),
+		ttl:    time.Second * time.Duration(ttl),
 		mutex:  new(sync.Mutex),
 	}
 }
@@ -79,11 +79,11 @@ func New(key string, ttl int, machines []string) *Mutex {
 func (m *Mutex) Lock() (err error) {
 	m.mutex.Lock()
 	for try := 1; try <= defaultTry; try++ {
-		err = m.lock()
+		err = m.lock(true)
 		if err == nil {
 			return nil
 		}
-		
+
 		m.debug("Lock node %v ERROR %v", m.key, err)
 		if try < defaultTry {
 			m.debug("Try to lock node %v again", m.key, err)
@@ -92,11 +92,21 @@ func (m *Mutex) Lock() (err error) {
 	return err
 }
 
-func (m *Mutex) lock() (err error) {
+func (m *Mutex) TryLock() (err error) {
+	m.mutex.Lock()
+	err = m.lock(false)
+	if err == nil {
+		return nil
+	}
+	m.debug("Lock node %v ERROR %v", m.key, err)
+	return err
+}
+
+func (m *Mutex) lock(wait bool) (err error) {
 	m.debug("Trying to create a node : key=%v", m.key)
 	setOptions := &client.SetOptions{
-		PrevExist:client.PrevNoExist,
-		TTL:      m.ttl,
+		PrevExist: client.PrevNoExist,
+		TTL:       m.ttl,
 	}
 	for {
 		resp, err := m.kapi.Set(m.ctx, m.key, m.id, setOptions)
@@ -104,9 +114,10 @@ func (m *Mutex) lock() (err error) {
 			m.debug("Create node %v OK [%q]", m.key, resp)
 			return nil
 		}
+
 		m.debug("Create node %v failed [%v]", m.key, err)
 		e, ok := err.(client.Error)
-		if !ok {
+		if !ok || !wait {
 			return err
 		}
 
@@ -121,8 +132,8 @@ func (m *Mutex) lock() (err error) {
 		}
 		m.debug("Get node %v OK", m.key)
 		watcherOptions := &client.WatcherOptions{
-			AfterIndex : resp.Index,
-			Recursive:false,
+			AfterIndex: resp.Index,
+			Recursive:  false,
 		}
 		watcher := m.kapi.Watcher(m.key, watcherOptions)
 		for {
@@ -178,4 +189,3 @@ func (m *Mutex) debug(format string, v ...interface{}) {
 func (m *Mutex) SetDebugLogger(w io.Writer) {
 	m.logger = w
 }
-
