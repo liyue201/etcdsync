@@ -31,13 +31,13 @@ func testLock() {
 	}
 }
 
-func testTrylock() {
+func testTryLock() {
 	wait := sync.WaitGroup{}
 	for i := 0; i < 20; i++ {
 		wait.Add(1)
 		go func() {
-			m := etcdsync.New("/mylock", 2, []string{"http://127.0.0.1:2379"})
 			defer wait.Done()
+			m := etcdsync.New("/mylock", 2, []string{"http://127.0.0.1:2379"})
 			err := m.TryLock()
 			if err != nil {
 				log.Println("etcdsync.TryLock Failed:", err)
@@ -54,5 +54,5 @@ func testTrylock() {
 
 func main() {
 	testLock()
-	testTrylock()
+	testTryLock()
 }
