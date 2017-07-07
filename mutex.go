@@ -24,7 +24,6 @@ type Mutex struct {
 	id     string // The identity of the caller
 	client client.Client
 	kapi   client.KeysAPI
-	ctx    context.Context
 	ttl    time.Duration
 	mutex  *sync.Mutex
 	logger io.Writer
@@ -67,7 +66,6 @@ func New(key string, ttl int, machines []string) *Mutex {
 		id:     fmt.Sprintf("%v-%v-%v", hostname, os.Getpid(), time.Now().Format("20060102-15:04:05.999999999")),
 		client: c,
 		kapi:   client.NewKeysAPI(c),
-		ctx:    context.TODO(),
 		ttl:    time.Second * time.Duration(ttl),
 		mutex:  new(sync.Mutex),
 	}
@@ -76,10 +74,10 @@ func New(key string, ttl int, machines []string) *Mutex {
 // Lock locks m.
 // If the lock is already in use, the calling goroutine
 // blocks until the mutex is available.
-func (m *Mutex) Lock() (err error) {
+func (m *Mutex) Lock(ctx context.Context) (err error) {
 	m.mutex.Lock()
 	for try := 1; try <= defaultTry; try++ {
-		err = m.lock(true)
+		err = m.lock(ctx, true)
 		if err == nil {
 			return nil
 		}
@@ -92,9 +90,9 @@ func (m *Mutex) Lock() (err error) {
 	return err
 }
 
-func (m *Mutex) TryLock() (err error) {
+func (m *Mutex) TryLock(ctx context.Context) (err error) {
 	m.mutex.Lock()
-	err = m.lock(false)
+	err = m.lock(ctx, false)
 	if err == nil {
 		return nil
 	}
@@ -102,14 +100,14 @@ func (m *Mutex) TryLock() (err error) {
 	return err
 }
 
-func (m *Mutex) lock(wait bool) (err error) {
+func (m *Mutex) lock(ctx context.Context, wait bool) (err error) {
 	m.debug("Trying to create a node : key=%v", m.key)
 	setOptions := &client.SetOptions{
 		PrevExist: client.PrevNoExist,
 		TTL:       m.ttl,
 	}
 	for {
-		resp, err := m.kapi.Set(m.ctx, m.key, m.id, setOptions)
+		resp, err := m.kapi.Set(ctx, m.key, m.id, setOptions)
 		if err == nil {
 			m.debug("Create node %v OK [%q]", m.key, resp)
 			return nil
@@ -126,7 +124,7 @@ func (m *Mutex) lock(wait bool) (err error) {
 		}
 
 		// Get the already node's value.
-		resp, err = m.kapi.Get(m.ctx, m.key, nil)
+		resp, err = m.kapi.Get(ctx, m.key, nil)
 		if err != nil {
 			return err
 		}
@@ -138,7 +136,7 @@ func (m *Mutex) lock(wait bool) (err error) {
 		watcher := m.kapi.Watcher(m.key, watcherOptions)
 		for {
 			m.debug("Watching %v ...", m.key)
-			resp, err = watcher.Next(m.ctx)
+			resp, err = watcher.Next(ctx)
 			if err != nil {
 				return err
 			}
@@ -159,11 +157,11 @@ func (m *Mutex) lock(wait bool) (err error) {
 // A locked Mutex is not associated with a particular goroutine.
 // It is allowed for one goroutine to lock a Mutex and then
 // arrange for another goroutine to unlock it.
-func (m *Mutex) Unlock() (err error) {
+func (m *Mutex) Unlock(ctx context.Context) (err error) {
 	defer m.mutex.Unlock()
 	for i := 1; i <= defaultTry; i++ {
 		var resp *client.Response
-		resp, err = m.kapi.Delete(m.ctx, m.key, nil)
+		resp, err = m.kapi.Delete(ctx, m.key, nil)
 		if err == nil {
 			m.debug("Delete %v OK", m.key)
 			return nil

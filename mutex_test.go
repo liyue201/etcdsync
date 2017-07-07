@@ -1,14 +1,13 @@
 package etcdsync
 
 import (
-	"testing"
 	"log"
+	"testing"
 	"time"
 
 	"github.com/coreos/etcd/client"
 	"golang.org/x/net/context"
 )
-
 
 func newKeysAPI(machines []string) client.KeysAPI {
 	cfg := client.Config{
@@ -35,7 +34,7 @@ func checkKeyExists(key string, kapi client.KeysAPI) bool {
 }
 
 func TestMutex(t *testing.T) {
-	log.SetFlags(log.Ltime|log.Ldate|log.Lshortfile)
+	log.SetFlags(log.Ltime | log.Ldate | log.Lshortfile)
 	lockKey := "/etcdsync"
 	machines := []string{"http://127.0.0.1:2379"}
 	kapi := newKeysAPI(machines)
@@ -43,7 +42,7 @@ func TestMutex(t *testing.T) {
 	if m == nil {
 		t.Errorf("New Mutex ERROR")
 	}
-	err := m.Lock()
+	err := m.Lock(context.Background())
 	if err != nil {
 		t.Errorf("failed")
 	}
@@ -54,7 +53,7 @@ func TestMutex(t *testing.T) {
 	}
 	//do something here
 
-	err = m.Unlock()
+	err = m.Unlock(context.Background())
 	if err != nil {
 		t.Errorf("failed")
 	}
@@ -67,7 +66,6 @@ func TestMutex(t *testing.T) {
 	}
 }
 
-
 func TestLockConcurrently(t *testing.T) {
 	slice := make([]int, 0, 3)
 	lockKey := "/etcd_sync"
@@ -79,7 +77,7 @@ func TestLockConcurrently(t *testing.T) {
 	if m1 == nil || m2 == nil || m3 == nil {
 		t.Errorf("New Mutex ERROR")
 	}
-	m1.Lock()
+	m1.Lock(context.Background())
 	if checkKeyExists(lockKey, kapi) == false {
 		t.Errorf("The mutex have been locked but the key node does not exists.")
 		t.Fail()
@@ -87,30 +85,30 @@ func TestLockConcurrently(t *testing.T) {
 	ch1 := make(chan bool)
 	go func() {
 		ch2 := make(chan bool)
-		m2.Lock()
+		m2.Lock(context.Background())
 		if checkKeyExists(lockKey, kapi) == false {
 			t.Errorf("The mutex have been locked but the key node does not exists.")
 			t.Fail()
 		}
 		go func() {
-			m3.Lock()
+			m3.Lock(context.Background())
 			if checkKeyExists(lockKey, kapi) == false {
 				t.Errorf("The mutex have been locked but the key node does not exists.")
 				t.Fail()
 			}
 			slice = append(slice, 2)
-			m3.Unlock()
+			m3.Unlock(context.Background())
 			ch2 <- true
 		}()
 		slice = append(slice, 1)
 		time.Sleep(1 * time.Second)
-		m2.Unlock()
+		m2.Unlock(context.Background())
 		<-ch2
 		ch1 <- true
 	}()
 	slice = append(slice, 0)
 	time.Sleep(1 * time.Second)
-	m1.Unlock()
+	m1.Unlock(context.Background())
 	<-ch1
 	if len(slice) != 3 {
 		t.Fail()
@@ -126,12 +124,12 @@ func TestLockTimeout(t *testing.T) {
 	slice := make([]int, 0, 2)
 	m1 := New("key", 2, []string{"http://127.0.0.1:2379"})
 	m2 := New("key", 2, []string{"http://127.0.0.1:2379"})
-	m1.Lock()
+	m1.Lock(context.Background())
 	ch := make(chan bool)
 	go func() {
-		m2.Lock()
+		m2.Lock(context.Background())
 		slice = append(slice, 1)
-		m2.Unlock()
+		m2.Unlock(context.Background())
 		ch <- true
 	}()
 	slice = append(slice, 0)
@@ -142,5 +140,3 @@ func TestLockTimeout(t *testing.T) {
 		}
 	}
 }
-
-
