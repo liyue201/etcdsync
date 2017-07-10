@@ -87,6 +87,7 @@ func (m *Mutex) Lock(ctx context.Context) (err error) {
 			m.debug("Try to lock node %v again", m.key, err)
 		}
 	}
+	m.mutex.Unlock()
 	return err
 }
 
@@ -96,6 +97,7 @@ func (m *Mutex) TryLock(ctx context.Context) (err error) {
 	if err == nil {
 		return nil
 	}
+	m.mutex.Unlock()
 	m.debug("Lock node %v ERROR %v", m.key, err)
 	return err
 }
